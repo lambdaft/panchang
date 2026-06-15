@@ -1,0 +1,7 @@
+streamlit
+streamlit-autorefresh
+ephem
+pandas
+altair
+geopy
+pytz
