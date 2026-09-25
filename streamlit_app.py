@@ -1,12 +1,10 @@
 # streamlit_app.py — Personal Vedic Panchang App
-# Accurate Astronomical Calculations with Ephem, Geolocation, Kaal Timings, Swara, and Sandhya
 import streamlit as st
 from datetime import datetime, date, timedelta, time
 import pytz
-import math
 import ephem
 from streamlit_autorefresh import st_autorefresh
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 import pandas as pd
 import altair as alt
 
@@ -21,164 +19,152 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- MODERN STYLING ---
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    
-    .panchang-header {
-        text-align: center;
-        margin-bottom: 1.5rem;
-        padding-top: 0.5rem;
-    }
-    
-    .panchang-title {
-        font-family: 'Cinzel', serif;
-        font-size: 2.2rem;
-        font-weight: 700;
-        letter-spacing: 1px;
-        color: #B45309;
-        margin: 0;
-    }
-    
-    .panchang-subtitle {
-        font-size: 0.95rem;
-        color: #6B7280;
-        margin-top: 4px;
-    }
-    
-    .card-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-        gap: 12px;
-        margin: 1rem 0;
-    }
-    
-    .panchang-card {
-        background: #FAF8F5;
-        border: 1px solid #EAE3D9;
-        border-radius: 12px;
-        padding: 12px 14px;
-        text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    
-    .panchang-card-title {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #78350F;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 4px;
-    }
-    
-    .panchang-card-val {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: #1F2937;
-    }
-    
-    .panchang-card-sub {
-        font-size: 0.75rem;
-        color: #6B7280;
-        margin-top: 2px;
-    }
-    
-    .section-title {
-        font-family: 'Cinzel', serif;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: #92400E;
-        text-align: center;
-        margin-top: 1.5rem;
-        margin-bottom: 0.8rem;
-        border-bottom: 2px solid #F3E8DC;
-        padding-bottom: 6px;
-    }
-    
-    .swara-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.9rem;
-    }
-    
-    .swara-ida {
-        background-color: #DBEAFE;
-        color: #1E40AF;
-        border: 1px solid #93C5FD;
-    }
-    
-    .swara-pingala {
-        background-color: #FEE2E2;
-        color: #991B1B;
-        border: 1px solid #FCA5A5;
-    }
-    
-    .table-container {
-        width: 100%;
-        overflow-x: auto;
-        margin: 12px 0;
-    }
-    
-    .custom-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.88rem;
-    }
-    
-    .custom-table th {
-        background-color: #F5EFEB;
-        color: #78350F;
-        padding: 8px 12px;
-        text-align: left;
-        font-weight: 600;
-        border-bottom: 2px solid #E5D5C5;
-    }
-    
-    .custom-table td {
-        padding: 8px 12px;
-        border-bottom: 1px solid #F0E6DC;
-    }
-    
-    .clock-banner {
-        background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
-        border: 1px solid #FDE68A;
-        border-radius: 14px;
-        padding: 16px;
-        text-align: center;
-        margin: 1.5rem 0;
-    }
-    
-    .clock-time {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #78350F;
-        font-family: 'Cinzel', serif;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def render_html(html: str):
+    """Render raw HTML safely in Streamlit without markdown indent interpretation."""
+    cleaned = "\n".join(line.strip() for line in html.strip().splitlines() if line.strip())
+    st.markdown(cleaned, unsafe_allow_html=True)
+
+# Custom Styling
+render_html("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.panchang-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    padding-top: 0.5rem;
+}
+
+.panchang-title {
+    font-family: 'Cinzel', serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #B45309;
+    margin: 0;
+}
+
+.panchang-subtitle {
+    font-size: 0.95rem;
+    color: #6B7280;
+    margin-top: 4px;
+}
+
+.panchang-card {
+    background: #FAF8F5;
+    border: 1px solid #EAE3D9;
+    border-radius: 12px;
+    padding: 12px 14px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.panchang-card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #78350F;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.panchang-card-val {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1F2937;
+}
+
+.panchang-card-sub {
+    font-size: 0.75rem;
+    color: #6B7280;
+    margin-top: 2px;
+}
+
+.section-title {
+    font-family: 'Cinzel', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #92400E;
+    text-align: center;
+    margin-top: 1.5rem;
+    margin-bottom: 0.8rem;
+    border-bottom: 2px solid #F3E8DC;
+    padding-bottom: 6px;
+}
+
+.swara-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.swara-ida {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+    border: 1px solid #93C5FD;
+}
+
+.swara-pingala {
+    background-color: #FEE2E2;
+    color: #991B1B;
+    border: 1px solid #FCA5A5;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 8px 0;
+}
+
+.custom-table th {
+    background-color: #F5EFEB;
+    color: #78350F;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #E5D5C5;
+}
+
+.custom-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #F0E6DC;
+    color: #1F2937;
+}
+
+.clock-banner {
+    background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%);
+    border: 1px solid #FDE68A;
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.clock-time {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #78350F;
+    font-family: 'Cinzel', serif;
+}
+</style>
+""")
 
 # Header
-st.markdown(
-    """
-    <div class="panchang-header">
-        <h1 class="panchang-title">🕉️ Personal Vedic Panchang</h1>
-        <div class="panchang-subtitle">Accurate Ephem Timings • Kaal Cycle • Swara • Naad Sadhana</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+render_html("""
+<div class="panchang-header">
+    <h1 class="panchang-title">🕉️ Personal Vedic Panchang</h1>
+    <div class="panchang-subtitle">Accurate Ephem Timings • Kaal Cycle • Swara • Naad Sadhana</div>
+</div>
+""")
 
-# --- POPULAR CITIES PRELOADED (Offline / Cloud Resilient) ---
+# Pre-cached popular cities for cloud resiliency
 KNOWN_CITIES = {
     "kolhapur": {"lat": "16.7050", "lon": "74.2433", "elevation": 569, "tz": "Asia/Kolkata", "display_name": "Kolhapur, Maharashtra, India"},
     "mumbai": {"lat": "19.0760", "lon": "72.8777", "elevation": 14, "tz": "Asia/Kolkata", "display_name": "Mumbai, Maharashtra, India"},
@@ -206,12 +192,8 @@ KNOWN_CITIES = {
 @st.cache_data(show_spinner=False, ttl=86400)
 def get_location_details(city_name: str):
     clean_city = city_name.strip().lower()
-    
-    # 1. Fast local cache lookup
     if clean_city in KNOWN_CITIES:
         return KNOWN_CITIES[clean_city]
-    
-    # 2. Try Nominatim Geocoder
     try:
         geolocator = Nominatim(user_agent="vedic_panchang_streamlit_app_v1", timeout=5)
         location = geolocator.geocode(city_name, addressdetails=True)
@@ -221,10 +203,8 @@ def get_location_details(city_name: str):
             elevation = 0
             if "altitude" in location.raw and location.raw["altitude"]:
                 elevation = float(location.raw["altitude"])
-            
             parts = [p.strip() for p in location.address.split(",")]
             short_name = f"{parts[0]}, {parts[-1]}" if len(parts) > 1 else location.address
-            
             return {
                 "lat": str(location.latitude),
                 "lon": str(location.longitude),
@@ -234,27 +214,24 @@ def get_location_details(city_name: str):
             }
     except Exception:
         pass
-        
-    # 3. Safe fallback
     return {
         "lat": "16.7050",
         "lon": "74.2433",
         "elevation": 569,
         "tz": "Asia/Kolkata",
-        "display_name": f"{city_name.capitalize()} (Defaulting to Kolhapur coordinates)",
+        "display_name": f"{city_name.capitalize()} (Kolhapur default)",
     }
 
-# --- CONTROLS SECTION ---
+# Location & Date Inputs
 col_loc, col_dt = st.columns([3, 2])
 with col_loc:
-    city_input = st.text_input("📍 City / Location", value="Kolhapur", help="Enter city name, e.g., Kolhapur, Mumbai, New York")
+    city_input = st.text_input("📍 City / Location", value="Kolhapur", help="Enter city name (e.g. Kolhapur, Mumbai, New York)")
 with col_dt:
     selected_date = st.date_input("📅 Date", value=date.today())
 
 loc_details = get_location_details(city_input)
 
-# Optional Manual Location Adjustment expander
-with st.expander("⚙️ Location & Coordinate Details"):
+with st.expander("⚙️ Location & Coordinate Settings"):
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         custom_lat = st.text_input("Latitude", value=loc_details["lat"])
@@ -275,30 +252,20 @@ except Exception:
     TZ = pytz.timezone("Asia/Kolkata")
 
 now = datetime.now(TZ)
+st.caption(f"Location: **{loc_details['display_name']}** | Timezone: `{custom_tz}` | Lat: `{LATITUDE}`, Lon: `{LONGITUDE}`")
 
-st.caption(f"Using location: **{loc_details['display_name']}** | Timezone: `{custom_tz}` | Lat: `{LATITUDE}`, Lon: `{LONGITUDE}`")
-
-# --- COLOR MAPS ---
+# Constants & Mappings
 KAAL_COLORS = {
-    "Kartavya Kaal": "#F59E0B",  # Amber/Yellow (Solar)
-    "Anand Kaal": "#3B82F6",     # Steel Blue (Lunar)
-    "Prarabdh Kaal": "#8B5CF6",  # Purple (Combined)
-    "Bhagya Kaal": "#78350F",    # Earth/Brown (Neutral)
+    "Kartavya Kaal": "#F59E0B",
+    "Anand Kaal": "#3B82F6",
+    "Prarabdh Kaal": "#8B5CF6",
+    "Bhagya Kaal": "#78350F",
 }
 
 RASHI_NAMES = [
-    "Meṣa (Aries)",
-    "Vṛṣabha (Taurus)",
-    "Mithuna (Gemini)",
-    "Karka (Cancer)",
-    "Siṁha (Leo)",
-    "Kanyā (Virgo)",
-    "Tulā (Libra)",
-    "Vṛścika (Scorpio)",
-    "Dhanu (Sagittarius)",
-    "Makara (Capricorn)",
-    "Kumbha (Aquarius)",
-    "Mīna (Pisces)",
+    "Meṣa (Aries)", "Vṛṣabha (Taurus)", "Mithuna (Gemini)", "Karka (Cancer)",
+    "Siṁha (Leo)", "Kanyā (Virgo)", "Tulā (Libra)", "Vṛścika (Scorpio)",
+    "Dhanu (Sagittarius)", "Makara (Capricorn)", "Kumbha (Aquarius)", "Mīna (Pisces)",
 ]
 
 NAKSHATRA_NAMES = [
@@ -396,7 +363,7 @@ NAAD_SADHANA_BASE_TIMES: Dict[tuple, str] = {
 
 NAKSHATRA_ARC = 360.0 / 27.0
 
-# --- Helper Astronomical Functions ---
+# Astronomical Calculations
 def get_swaras_from_tithi(tithi_data: Dict[str, Any]) -> Dict[str, str]:
     default_swara = {"sunrise": "Unknown", "sunset": "Unknown"}
     try:
@@ -542,7 +509,7 @@ def get_nakshatra_span(ref_date):
         "end": dt_from_jd(end_jd),
     }
 
-# --- Calculation Data ---
+# Computations for Selected Date
 weekday = selected_date.weekday()
 day_index = (weekday + 1) % 7
 swara_at_waking = ["Pingala", "Ida", "Pingala", "Ida", "Ida", "Ida", "Pingala"][day_index]
@@ -558,7 +525,6 @@ tomorrow_nakshatra = get_nakshatra_span(selected_date + timedelta(days=1))
 today_sun_rasi = get_sun_rasi(selected_date)
 today_moon_rasi = get_moon_rasi(selected_date)
 
-# --- ASTRONOMICAL CALCULATIONS (EPHEM) ---
 def get_accurate_astro_times(target_date):
     obs = ephem.Observer()
     obs.lat = LATITUDE
@@ -604,7 +570,6 @@ sunset = astro_data["sunset"]
 moon_rise = astro_data["moon_rise"]
 moon_set = astro_data["moon_set"]
 
-# Midpoint Calculations
 def calculate_madhyamas(sunrise_dt: datetime, sunset_dt: datetime) -> Dict[str, datetime]:
     day_duration = sunset_dt - sunrise_dt
     day_madhyama = sunrise_dt + (day_duration / 2)
@@ -631,7 +596,6 @@ tithi_at_sunset = (
 sunrise_swaras = get_swaras_from_tithi(tithi_at_sunrise)
 sunset_swaras = get_swaras_from_tithi(tithi_at_sunset)
 
-# Naad Sadhana Times
 def calculate_naad_sadhana_times(midday_dt: datetime, current_date: date, tithi_data: Dict[str, Any]):
     minutes_to_subtract = midday_dt.minute
     adjustment = timedelta(minutes=minutes_to_subtract)
@@ -657,7 +621,6 @@ naad_sadhana_times = calculate_naad_sadhana_times(midday, selected_date, tithi_a
 morning_sadhana = naad_sadhana_times["morning_sadhana"]
 evening_sadhana = naad_sadhana_times["evening_sadhana"]
 
-# Sandhya Times
 sandhya_times = {
     "morning": {"start": sunrise - timedelta(hours=1), "end": sunrise + timedelta(hours=1)},
     "midday": {"start": midday - timedelta(hours=1), "end": midday + timedelta(hours=1)},
@@ -665,7 +628,6 @@ sandhya_times = {
     "midnight": {"start": midnight - timedelta(hours=1), "end": midnight + timedelta(hours=1)},
 }
 
-# Kaal Calculations
 def calculate_kaal_periods(day_start_dt, day_end_dt, sunrise_dt, sunset_dt, moon_rise_dt, moon_set_dt):
     events = [
         (day_start_dt, "START"),
@@ -732,68 +694,57 @@ for p in kaal_periods:
     })
 df_chart = pd.DataFrame(chart_data)
 
-# --- UI PRESENTATION ---
-
-# 1. Day Summary Banner
+# --- 1. DAY SUMMARY BANNER ---
 waking_badge_class = "swara-ida" if swara_at_waking == "Ida" else "swara-pingala"
-st.markdown(
-    f"""
-    <div style="background: #FAF8F5; border: 1px solid #EAE3D9; border-radius: 14px; padding: 18px; text-align: center; margin-top: 0.5rem; margin-bottom: 1.5rem;">
-        <div style="font-size: 0.95rem; font-weight: 600; color: #78350F; text-transform: uppercase; letter-spacing: 0.8px;">Waking Swara of the Day</div>
-        <div style="margin: 8px 0;"><span class="swara-badge {waking_badge_class}" style="font-size: 1.3rem; padding: 6px 18px;">🌬️ {swara_at_waking} Swara</span></div>
-        <div style="font-size: 1.05rem; font-weight: 600; color: #1F2937;">{selected_date.strftime('%A, %d %B %Y')}</div>
-        <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">Today's Tithi: <b>{today_tithi['name']} ({today_tithi['paksha']})</b> • Nakshatra: <b>{today_nakshatra['name']}</b></div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+render_html(f"""
+<div style="background: #FAF8F5; border: 1px solid #EAE3D9; border-radius: 14px; padding: 18px; text-align: center; margin-top: 0.5rem; margin-bottom: 1.5rem;">
+    <div style="font-size: 0.95rem; font-weight: 600; color: #78350F; text-transform: uppercase; letter-spacing: 0.8px;">Waking Swara of the Day</div>
+    <div style="margin: 8px 0;"><span class="swara-badge {waking_badge_class}" style="font-size: 1.3rem; padding: 6px 18px;">🌬️ {swara_at_waking} Swara</span></div>
+    <div style="font-size: 1.05rem; font-weight: 600; color: #1F2937;">{selected_date.strftime('%A, %d %B %Y')}</div>
+    <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">Today's Tithi: <b>{today_tithi['name']} ({today_tithi['paksha']})</b> • Nakshatra: <b>{today_nakshatra['name']}</b></div>
+</div>
+""")
 
-# 2. Key Astro Rise/Set Cards
-st.markdown('<div class="section-title">☀️ Astronomical Rise & Set</div>', unsafe_allow_html=True)
+# --- 2. ASTRO RISE/SET CARDS ---
+render_html('<div class="section-title">☀️ Astronomical Rise & Set</div>')
 col_sr, col_ss, col_mr, col_ms = st.columns(4)
-
 with col_sr:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">🌅 Sunrise</div>
         <div class="panchang-card-val">{sunrise.strftime('%I:%M %p') if sunrise else 'N/A'}</div>
     </div>
-    """, unsafe_allow_html=True)
-
+    """)
 with col_ss:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">🌇 Sunset</div>
         <div class="panchang-card-val">{sunset.strftime('%I:%M %p') if sunset else 'N/A'}</div>
     </div>
-    """, unsafe_allow_html=True)
-
+    """)
 with col_mr:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">🌙 Moonrise</div>
         <div class="panchang-card-val">{moon_rise.strftime('%I:%M %p') if moon_rise else 'N/A'}</div>
     </div>
-    """, unsafe_allow_html=True)
-
+    """)
 with col_ms:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">🌘 Moonset</div>
         <div class="panchang-card-val">{moon_set.strftime('%I:%M %p') if moon_set else 'N/A'}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-# 3. 24-Hour Kaal Cycle Wheel & Table
-st.markdown('<div class="section-title">⌛ 24-Hour Kaal Cycle</div>', unsafe_allow_html=True)
+# --- 3. 24-HOUR KAAL CYCLE ---
+render_html('<div class="section-title">⌛ 24-Hour Kaal Cycle</div>')
 
 if not df_chart.empty:
     col_chart, col_tbl = st.columns([1, 1])
-    
     with col_chart:
         domain = list(KAAL_COLORS.keys())
         range_ = list(KAAL_COLORS.values())
-
         pie = (
             alt.Chart(df_chart)
             .mark_arc(innerRadius=65, outerRadius=115, stroke="#ffffff", strokeWidth=2)
@@ -816,153 +767,146 @@ if not df_chart.empty:
         st.altair_chart(pie, use_container_width=True)
 
     with col_tbl:
-        table_html = """
-        <div class="table-container">
-            <table class="custom-table">
-                <thead>
-                    <tr><th>Kaal Period</th><th>Start</th><th>End</th><th>Hrs</th></tr>
-                </thead>
-                <tbody>
-        """
+        table_rows = []
         for p in kaal_periods:
             k_name = p["Kaal"]
             color_dot = KAAL_COLORS.get(k_name, "#78350F")
             dur = (p["End"] - p["Start"]).total_seconds() / 3600
-            table_html += f"""
-                <tr>
-                    <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:{color_dot};margin-right:6px;"></span><b>{k_name}</b></td>
-                    <td>{p['Start'].strftime('%I:%M %p')}</td>
-                    <td>{p['End'].strftime('%I:%M %p')}</td>
-                    <td>{dur:.1f}h</td>
-                </tr>
-            """
-        table_html += "</tbody></table></div>"
-        st.markdown(table_html, unsafe_allow_html=True)
+            table_rows.append(
+                f'<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:{color_dot};margin-right:6px;"></span><b>{k_name}</b></td>'
+                f'<td>{p["Start"].strftime("%I:%M %p")}</td>'
+                f'<td>{p["End"].strftime("%I:%M %p")}</td>'
+                f'<td>{dur:.1f}h</td></tr>'
+            )
+        rows_str = "".join(table_rows)
+        render_html(f"""
+        <table class="custom-table">
+            <thead>
+                <tr><th>Kaal Period</th><th>Start</th><th>End</th><th>Duration</th></tr>
+            </thead>
+            <tbody>
+                {rows_str}
+            </tbody>
+        </table>
+        """)
 
-# 4. Zodiac & Rasi
-st.markdown('<div class="section-title">♈ Zodiac Sign (Rasi)</div>', unsafe_allow_html=True)
+# --- 4. ZODIAC / RASI ---
+render_html('<div class="section-title">♈ Zodiac Sign (Rasi)</div>')
 col_srasi, col_mrasi = st.columns(2)
 with col_srasi:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">☀️ Surya Rasi (Sun Sign)</div>
         <div class="panchang-card-val" style="color: #B45309;">{today_sun_rasi}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 with col_mrasi:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">🌙 Chandra Rasi (Moon Sign)</div>
         <div class="panchang-card-val" style="color: #1E40AF;">{today_moon_rasi}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-# 5. Sandhya & Madhyama Timings
-st.markdown('<div class="section-title">⏱️ Sandhya Windows & Midpoints</div>', unsafe_allow_html=True)
+# --- 5. SANDHYA WINDOWS ---
+render_html('<div class="section-title">⏱️ Sandhya Windows & Midpoints</div>')
 cs1, cs2, cs3, cs4 = st.columns(4)
 with cs1:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Morning Sandhya</div>
-        <div class="panchang-card-val" style="font-size:0.95rem;">{sandhya_times['morning']['start'].strftime('%I:%M %p')} - {sandhya_times['morning']['end'].strftime('%I:%M %p')}</div>
+        <div class="panchang-card-val" style="font-size:0.92rem;">{sandhya_times['morning']['start'].strftime('%I:%M %p')} - {sandhya_times['morning']['end'].strftime('%I:%M %p')}</div>
         <div class="panchang-card-sub">Mid: {sunrise.strftime('%I:%M %p')}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 with cs2:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Midday Sandhya</div>
-        <div class="panchang-card-val" style="font-size:0.95rem;">{sandhya_times['midday']['start'].strftime('%I:%M %p')} - {sandhya_times['midday']['end'].strftime('%I:%M %p')}</div>
+        <div class="panchang-card-val" style="font-size:0.92rem;">{sandhya_times['midday']['start'].strftime('%I:%M %p')} - {sandhya_times['midday']['end'].strftime('%I:%M %p')}</div>
         <div class="panchang-card-sub">Mid: {midday.strftime('%I:%M %p')}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 with cs3:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Evening Sandhya</div>
-        <div class="panchang-card-val" style="font-size:0.95rem;">{sandhya_times['evening']['start'].strftime('%I:%M %p')} - {sandhya_times['evening']['end'].strftime('%I:%M %p')}</div>
+        <div class="panchang-card-val" style="font-size:0.92rem;">{sandhya_times['evening']['start'].strftime('%I:%M %p')} - {sandhya_times['evening']['end'].strftime('%I:%M %p')}</div>
         <div class="panchang-card-sub">Mid: {sunset.strftime('%I:%M %p')}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 with cs4:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Midnight Sandhya</div>
-        <div class="panchang-card-val" style="font-size:0.95rem;">{sandhya_times['midnight']['start'].strftime('%I:%M %p')} - {sandhya_times['midnight']['end'].strftime('%I:%M %p')}</div>
+        <div class="panchang-card-val" style="font-size:0.92rem;">{sandhya_times['midnight']['start'].strftime('%I:%M %p')} - {sandhya_times['midnight']['end'].strftime('%I:%M %p')}</div>
         <div class="panchang-card-sub">Mid: {midnight.strftime('%I:%M %p')}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-# 6. Naad Sadhana Times
-st.markdown('<div class="section-title">🔔 Naad Sadhana Times</div>', unsafe_allow_html=True)
+# --- 6. NAAD SADHANA ---
+render_html('<div class="section-title">🔔 Naad Sadhana Times</div>')
 if morning_sadhana and evening_sadhana:
     cn1, cn2 = st.columns(2)
     with cn1:
-        st.markdown(f"""
+        render_html(f"""
         <div class="panchang-card">
             <div class="panchang-card-title">🌅 Morning Naad Sadhana</div>
             <div class="panchang-card-val" style="color: #B45309;">{morning_sadhana.strftime('%I:%M %p')}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
     with cn2:
-        st.markdown(f"""
+        render_html(f"""
         <div class="panchang-card">
             <div class="panchang-card-title">🌇 Evening Naad Sadhana</div>
             <div class="panchang-card-val" style="color: #78350F;">{evening_sadhana.strftime('%I:%M %p')}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """)
 else:
     st.warning("Could not compute exact Naad Sadhana times for the selected date.")
 
-# 7. Nakshatra Timeline & Attributes
-st.markdown('<div class="section-title">✨ Nakshatra Timings & Attributes</div>', unsafe_allow_html=True)
+# --- 7. NAKSHATRA ---
+render_html('<div class="section-title">✨ Nakshatra Timings & Attributes</div>')
 for label, n_data in [("Yesterday's", yesterday_nakshatra), ("Today's", today_nakshatra), ("Tomorrow's", tomorrow_nakshatra)]:
     attrs = NAKSHATRA_ATTRIBUTES.get(n_data["name"], {})
     is_today = label == "Today's"
     highlight_style = "border-left: 4px solid #B45309; background: #FAF5F0;" if is_today else "background: #FAF8F5;"
-    st.markdown(
-        f"""
-        <div style="{highlight_style} border: 1px solid #EAE3D9; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <div>
-                    <span style="font-size: 0.8rem; font-weight: 600; color: #78350F; text-transform: uppercase;">{label}</span>
-                    <span style="font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-left: 8px;">{n_data['name']}</span>
-                </div>
-                <div style="font-size: 0.85rem; color: #4B5563;">
-                    {n_data['start'].strftime('%b %d, %I:%M %p')} → {n_data['end'].strftime('%b %d, %I:%M %p')}
-                </div>
+    render_html(f"""
+    <div style="{highlight_style} border: 1px solid #EAE3D9; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #78350F; text-transform: uppercase;">{label}</span>
+                <span style="font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-left: 8px;">{n_data['name']}</span>
             </div>
-            <div style="font-size: 0.82rem; color: #6B7280; margin-top: 6px;">
-                Nadi: <b>{attrs.get('Nadi','—')}</b> • Tattva: <b>{attrs.get('Tattva','—')}</b> • Adhipati: <b>{attrs.get('Adhipati','—')}</b> • Swabhava: <b>{attrs.get('Swabhava','—')}</b>
+            <div style="font-size: 0.85rem; color: #4B5563;">
+                {n_data['start'].strftime('%b %d, %I:%M %p')} → {n_data['end'].strftime('%b %d, %I:%M %p')}
             </div>
         </div>
-        """,
-        unsafe_allow_html=True
-    )
+        <div style="font-size: 0.82rem; color: #6B7280; margin-top: 6px;">
+            Nadi: <b>{attrs.get('Nadi','—')}</b> • Tattva: <b>{attrs.get('Tattva','—')}</b> • Adhipati: <b>{attrs.get('Adhipati','—')}</b> • Swabhava: <b>{attrs.get('Swabhava','—')}</b>
+        </div>
+    </div>
+    """)
 
-# 8. Tithi Timeline & Swara
-st.markdown('<div class="section-title">🌘 Tithi & Swara Transitions</div>', unsafe_allow_html=True)
+# --- 8. TITHI & SWARA ---
+render_html('<div class="section-title">🌘 Tithi & Swara Transitions</div>')
 for label, t_data in [("Yesterday's", yesterday_tithi), ("Today's", today_tithi), ("Tomorrow's", tomorrow_tithi)]:
     is_today = label == "Today's"
     highlight_style = "border-left: 4px solid #B45309; background: #FAF5F0;" if is_today else "background: #FAF8F5;"
-    st.markdown(
-        f"""
-        <div style="{highlight_style} border: 1px solid #EAE3D9; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-                <div>
-                    <span style="font-size: 0.8rem; font-weight: 600; color: #78350F; text-transform: uppercase;">{label}</span>
-                    <span style="font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-left: 8px;">{t_data['name']} ({t_data['paksha']} Paksha)</span>
-                </div>
-                <div style="font-size: 0.85rem; color: #4B5563;">
-                    {t_data['start'].strftime('%b %d, %I:%M %p')} → {t_data['end'].strftime('%b %d, %I:%M %p')}
-                </div>
+    render_html(f"""
+    <div style="{highlight_style} border: 1px solid #EAE3D9; border-radius: 10px; padding: 12px 16px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <span style="font-size: 0.8rem; font-weight: 600; color: #78350F; text-transform: uppercase;">{label}</span>
+                <span style="font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-left: 8px;">{t_data['name']} ({t_data['paksha']} Paksha)</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #4B5563;">
+                {t_data['start'].strftime('%b %d, %I:%M %p')} → {t_data['end'].strftime('%b %d, %I:%M %p')}
             </div>
         </div>
-        """,
-        unsafe_allow_html=True
-    )
+    </div>
+    """)
 
-# Swara at Sunrise & Sunset
 sr_swara = sunrise_swaras.get('sunrise', 'Unknown')
 ss_swara = sunset_swaras.get('sunset', 'Unknown')
 sr_class = "swara-ida" if sr_swara == "Ida" else "swara-pingala"
@@ -970,31 +914,27 @@ ss_class = "swara-ida" if ss_swara == "Ida" else "swara-pingala"
 
 csw1, csw2 = st.columns(2)
 with csw1:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Sunrise Swara ({tithi_at_sunrise['name']})</div>
         <div style="margin-top: 6px;"><span class="swara-badge {sr_class}">🌬️ {sr_swara}</span></div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 with csw2:
-    st.markdown(f"""
+    render_html(f"""
     <div class="panchang-card">
         <div class="panchang-card-title">Sunset Swara ({tithi_at_sunset['name']})</div>
         <div style="margin-top: 6px;"><span class="swara-badge {ss_class}">🌬️ {ss_swara}</span></div>
     </div>
-    """, unsafe_allow_html=True)
+    """)
 
-# Live Clock Banner
-st.markdown(
-    f"""
-    <div class="clock-banner">
-        <div style="font-size: 0.85rem; font-weight: 600; color: #78350F; text-transform: uppercase; letter-spacing: 1px;">Current Local Time ({loc_details['tz']})</div>
-        <div class="clock-time">{now.strftime('%I:%M:%S %p')}</div>
-        <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">{loc_details['display_name']} • Live Refresh Active</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# --- 9. LIVE CLOCK ---
+render_html(f"""
+<div class="clock-banner">
+    <div style="font-size: 0.85rem; font-weight: 600; color: #78350F; text-transform: uppercase; letter-spacing: 1px;">Current Local Time ({loc_details['tz']})</div>
+    <div class="clock-time">{now.strftime('%I:%M:%S %p')}</div>
+    <div style="font-size: 0.85rem; color: #6B7280; margin-top: 4px;">{loc_details['display_name']} • Live Refresh Active</div>
+</div>
+""")
 
-# Auto refresh every 60s
 st_autorefresh(interval=60000, key="panchang_live_refresh")
