@@ -908,8 +908,8 @@ if not df_chart.empty:
             </tbody>
         </table>
         <div style="font-size:0.78rem; color:#6B7280; margin-top:8px; line-height:1.4;">
-            🟡 <b>Kartavya Kaal</b>: Solar/Action • 🔵 <b>Anand Kaal</b>: Lunar/Receptive<br>
-            🟣 <b>Prarabdh Kaal</b>: Sun & Moon Up • 🟤 <b>Bhagya Kaal</b>: Rest/Night
+            🟡 <b>Kartavya Kaal</b> 🔵 <b>Anand Kaal</b><br>
+            🟣 <b>Prarabdh Kaal</b> 🟤 <b>Bhagya Kaal</b>
         </div>
         """)
 
