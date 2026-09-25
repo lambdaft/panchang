@@ -2,6 +2,7 @@
 import streamlit as st
 from datetime import datetime, date, timedelta, time
 import pytz
+import math
 import ephem
 from streamlit_autorefresh import st_autorefresh
 from typing import Dict, Any, Optional
@@ -737,34 +738,150 @@ with col_ms:
     </div>
     """)
 
-# --- 3. 24-HOUR KAAL CYCLE ---
-render_html('<div class="section-title">⌛ 24-Hour Kaal Cycle</div>')
+# --- 3. 24-HOUR KAAL CYCLE CLOCK & TIMINGS ---
+render_html('<div class="section-title">⌛ 24-Hour Kaal Cycle Clock</div>')
+
+def generate_kaal_clock_svg(kaal_periods_list, day_start, now_dt, sr_dt, ss_dt):
+    cx, cy = 180, 180
+    r_in, r_out = 78, 132
+    dial_r = 166
+    
+    svg = []
+    svg.append('<svg viewBox="0 0 360 360" width="100%" height="100%" style="max-width:360px; display:block; margin:auto; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.07)); font-family: \'Plus Jakarta Sans\', -apple-system, sans-serif;">')
+    
+    # 1. Base Dial Face & Outer Ring
+    svg.append(f'<circle cx="{cx}" cy="{cy}" r="{dial_r}" fill="#FAF8F5" stroke="#EAE3D9" stroke-width="2.5"/>')
+    svg.append(f'<circle cx="{cx}" cy="{cy}" r="{r_out+4}" fill="none" stroke="#D4AF37" stroke-width="1.2" stroke-dasharray="2,3"/>')
+    
+    # 2. 24-Hour Dial Ticks and Labels
+    for h in range(24):
+        deg = (h / 24.0) * 360.0
+        rad = math.radians(deg - 90)
+        is_major = (h % 3 == 0)
+        tick_len = 8 if is_major else 4
+        stroke_w = 1.8 if is_major else 1.0
+        stroke_c = "#78350F" if is_major else "#D1C4B5"
+        
+        x_start = cx + (r_out + 6) * math.cos(rad)
+        y_start = cy + (r_out + 6) * math.sin(rad)
+        x_end = cx + (r_out + 6 + tick_len) * math.cos(rad)
+        y_end = cy + (r_out + 6 + tick_len) * math.sin(rad)
+        svg.append(f'<line x1="{x_start:.2f}" y1="{y_start:.2f}" x2="{x_end:.2f}" y2="{y_end:.2f}" stroke="{stroke_c}" stroke-width="{stroke_w}" stroke-linecap="round"/>')
+        
+        if is_major:
+            lbl_r = dial_r - 14
+            x_lbl = cx + lbl_r * math.cos(rad)
+            y_lbl = cy + lbl_r * math.sin(rad)
+            if h == 0:
+                lbl_text = "12 AM"
+            elif h == 6:
+                lbl_text = "6 AM"
+            elif h == 12:
+                lbl_text = "12 PM"
+            elif h == 18:
+                lbl_text = "6 PM"
+            elif h < 12:
+                lbl_text = f"{h} AM"
+            else:
+                lbl_text = f"{h-12} PM"
+            svg.append(f'<text x="{x_lbl:.2f}" y="{y_lbl+3.5:.2f}" text-anchor="middle" font-size="8.5" font-weight="700" fill="#78350F">{lbl_text}</text>')
+
+    # 3. Underlayed Kala Chakra Windows (Annular Sectors)
+    for p in kaal_periods_list:
+        s_sec = max(0.0, (p["Start"] - day_start).total_seconds())
+        e_sec = min(86400.0, (p["End"] - day_start).total_seconds())
+        if e_sec <= s_sec:
+            continue
+        s_deg = (s_sec / 86400.0) * 360.0
+        e_deg = (e_sec / 86400.0) * 360.0
+        if e_deg - s_deg >= 360.0:
+            e_deg = s_deg + 359.99
+            
+        rad1 = math.radians(s_deg - 90)
+        rad2 = math.radians(e_deg - 90)
+        x1_o = cx + r_out * math.cos(rad1)
+        y1_o = cy + r_out * math.sin(rad1)
+        x2_o = cx + r_out * math.cos(rad2)
+        y2_o = cy + r_out * math.sin(rad2)
+        x1_i = cx + r_in * math.cos(rad1)
+        y1_i = cy + r_in * math.sin(rad1)
+        x2_i = cx + r_in * math.cos(rad2)
+        y2_i = cy + r_in * math.sin(rad2)
+        
+        large_arc = 1 if (e_deg - s_deg) > 180.0 else 0
+        path_d = f"M {x1_o:.2f} {y1_o:.2f} A {r_out} {r_out} 0 {large_arc} 1 {x2_o:.2f} {y2_o:.2f} L {x2_i:.2f} {y2_i:.2f} A {r_in} {r_in} 0 {large_arc} 0 {x1_i:.2f} {y1_i:.2f} Z"
+        color = KAAL_COLORS.get(p["Kaal"], "#78350F")
+        time_info = f"{p['Kaal']}: {p['Start'].strftime('%I:%M %p')} - {p['End'].strftime('%I:%M %p')}"
+        svg.append(f'<path d="{path_d}" fill="{color}" stroke="#FFFFFF" stroke-width="1.8"><title>{time_info}</title></path>')
+
+    # 4. Sunrise & Sunset Indicators
+    if sr_dt and day_start <= sr_dt <= (day_start + timedelta(days=1)):
+        sr_sec = (sr_dt - day_start).total_seconds()
+        sr_deg = (sr_sec / 86400.0) * 360.0
+        sr_rad = math.radians(sr_deg - 90)
+        sx = cx + (r_out + 2) * math.cos(sr_rad)
+        sy = cy + (r_out + 2) * math.sin(sr_rad)
+        svg.append(f'<circle cx="{sx:.2f}" cy="{sy:.2f}" r="4.5" fill="#F59E0B" stroke="#FFFFFF" stroke-width="1.2"><title>Sunrise: {sr_dt.strftime("%I:%M %p")}</title></circle>')
+
+    if ss_dt and day_start <= ss_dt <= (day_start + timedelta(days=1)):
+        ss_sec = (ss_dt - day_start).total_seconds()
+        ss_deg = (ss_sec / 86400.0) * 360.0
+        ss_rad = math.radians(ss_deg - 90)
+        sx = cx + (r_out + 2) * math.cos(ss_rad)
+        sy = cy + (r_out + 2) * math.sin(ss_rad)
+        svg.append(f'<circle cx="{sx:.2f}" cy="{sy:.2f}" r="4.5" fill="#DC2626" stroke="#FFFFFF" stroke-width="1.2"><title>Sunset: {ss_dt.strftime("%I:%M %p")}</title></circle>')
+
+    # 5. Center Hub Dial (Live Digital Time & Active Kaal)
+    active_kaal = "—"
+    active_color = "#78350F"
+    for p in kaal_periods_list:
+        if p["Start"] <= now_dt < p["End"]:
+            active_kaal = p["Kaal"]
+            active_color = KAAL_COLORS.get(active_kaal, "#78350F")
+            break
+            
+    svg.append(f'<circle cx="{cx}" cy="{cy}" r="{r_in-2}" fill="#FFFDFB" stroke="#EAE3D9" stroke-width="2"/>')
+    svg.append(f'<circle cx="{cx}" cy="{cy}" r="{r_in-8}" fill="none" stroke="#D4AF37" stroke-width="1" stroke-dasharray="2,3"/>')
+
+    # 6. Current Time Needle (Live Clock Hand)
+    now_hours = now_dt.hour + now_dt.minute / 60.0 + now_dt.second / 3600.0
+    now_deg = (now_hours / 24.0) * 360.0
+    rad_now = math.radians(now_deg - 90)
+    rad_perp = math.radians(now_deg)
+    
+    tip_len = r_out + 12
+    tip_x = cx + tip_len * math.cos(rad_now)
+    tip_y = cy + tip_len * math.sin(rad_now)
+    
+    tail_len = 18
+    tail_x = cx - tail_len * math.cos(rad_now)
+    tail_y = cy - tail_len * math.sin(rad_now)
+    
+    w = 3.2
+    w1_x = cx + w * math.cos(rad_perp)
+    w1_y = cy + w * math.sin(rad_perp)
+    w2_x = cx - w * math.cos(rad_perp)
+    w2_y = cy - w * math.sin(rad_perp)
+    
+    needle_d = f"M {w1_x:.2f} {w1_y:.2f} L {tip_x:.2f} {tip_y:.2f} L {w2_x:.2f} {w2_y:.2f} L {tail_x:.2f} {tail_y:.2f} Z"
+    svg.append(f'<path d="{needle_d}" fill="#DC2626" opacity="0.95" stroke="#991B1B" stroke-width="0.8" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));"/>')
+    svg.append(f'<circle cx="{tip_x:.2f}" cy="{tip_y:.2f}" r="4.5" fill="#FEF08A" stroke="#DC2626" stroke-width="1.5"><title>Current Time: {now_dt.strftime("%I:%M:%S %p")}</title></circle>')
+    svg.append(f'<circle cx="{cx}" cy="{cy}" r="6.5" fill="#78350F" stroke="#FDE68A" stroke-width="1.8"/>')
+    
+    # Center Hub Text
+    svg.append(f'<text x="{cx}" y="{cy-22}" text-anchor="middle" font-size="8" font-weight="700" fill="#9CA3AF" letter-spacing="1">CURRENT TIME</text>')
+    svg.append(f'<text x="{cx}" y="{cy-2}" text-anchor="middle" font-family="Cinzel, serif" font-size="16" font-weight="700" fill="#1F2937">{now_dt.strftime("%I:%M %p")}</text>')
+    svg.append(f'<rect x="{cx-52}" y="{cy+11}" width="104" height="18" rx="9" fill="{active_color}" opacity="0.15"/>')
+    svg.append(f'<text x="{cx}" y="{cy+23.5}" text-anchor="middle" font-size="9" font-weight="700" fill="{active_color}">● {active_kaal}</text>')
+    
+    svg.append('</svg>')
+    return "".join(svg)
 
 if not df_chart.empty:
     col_chart, col_tbl = st.columns([1, 1])
     with col_chart:
-        domain = list(KAAL_COLORS.keys())
-        range_ = list(KAAL_COLORS.values())
-        pie = (
-            alt.Chart(df_chart)
-            .mark_arc(innerRadius=65, outerRadius=115, stroke="#ffffff", strokeWidth=2)
-            .encode(
-                theta=alt.Theta("Duration:Q", stack=True),
-                order=alt.Order("Start:O"),
-                color=alt.Color(
-                    "Kaal:N",
-                    scale=alt.Scale(domain=domain, range=range_),
-                    legend=alt.Legend(orient="bottom", columns=2, title=None)
-                ),
-                tooltip=[
-                    alt.Tooltip("Kaal:N", title="Kaal"),
-                    alt.Tooltip("TimeRange:N", title="Time Window"),
-                    alt.Tooltip("Duration:Q", format=".2f", title="Duration (hrs)")
-                ]
-            )
-            .properties(height=280)
-        )
-        st.altair_chart(pie, use_container_width=True)
+        clock_svg = generate_kaal_clock_svg(kaal_periods, day_start_dt, now, sunrise, sunset)
+        render_html(clock_svg)
 
     with col_tbl:
         table_rows = []
@@ -772,8 +889,10 @@ if not df_chart.empty:
             k_name = p["Kaal"]
             color_dot = KAAL_COLORS.get(k_name, "#78350F")
             dur = (p["End"] - p["Start"]).total_seconds() / 3600
+            is_active = (p["Start"] <= now < p["End"])
+            active_badge = '<span style="font-size:0.75rem; background:#DCFCE7; color:#166534; padding:2px 6px; border-radius:10px; margin-left:6px; font-weight:700;">LIVE</span>' if is_active else ''
             table_rows.append(
-                f'<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:{color_dot};margin-right:6px;"></span><b>{k_name}</b></td>'
+                f'<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background-color:{color_dot};margin-right:6px;"></span><b>{k_name}</b>{active_badge}</td>'
                 f'<td>{p["Start"].strftime("%I:%M %p")}</td>'
                 f'<td>{p["End"].strftime("%I:%M %p")}</td>'
                 f'<td>{dur:.1f}h</td></tr>'
@@ -788,6 +907,10 @@ if not df_chart.empty:
                 {rows_str}
             </tbody>
         </table>
+        <div style="font-size:0.78rem; color:#6B7280; margin-top:8px; line-height:1.4;">
+            🟡 <b>Kartavya Kaal</b>: Solar/Action • 🔵 <b>Anand Kaal</b>: Lunar/Receptive<br>
+            🟣 <b>Prarabdh Kaal</b>: Sun & Moon Up • 🟤 <b>Bhagya Kaal</b>: Rest/Night
+        </div>
         """)
 
 # --- 4. ZODIAC / RASI ---
