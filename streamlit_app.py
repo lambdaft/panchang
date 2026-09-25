@@ -159,7 +159,7 @@ html, body, [class*="css"] {
 # Header
 render_html("""
 <div class="panchang-header">
-    <h1 class="panchang-title">🕉️ Personal Vedic Panchang</h1>
+    <h1 class="panchang-title">🕉️ Personal Panchang</h1>
     <div class="panchang-subtitle">Accurate Ephem Timings • Kaal Cycle • Swara • Naad Sadhana</div>
 </div>
 """)
