@@ -452,87 +452,78 @@ def jd(dt):
     )
 
 
-def sun_long(jd_val):
-    return (280.46646 + 36000.76983 * ((jd_val - 2451545.0) / 36525)) % 360
+def to_ephem_date(dt: datetime) -> ephem.Date:
+    """Convert timezone-aware or naive datetime to ephem.Date (UTC)."""
+    utc_dt = dt.astimezone(pytz.utc) if dt.tzinfo else pytz.utc.localize(dt)
+    return ephem.Date(utc_dt)
 
 
-def moon_long(jd_val):
-    return (218.31617 + 481267.8813 * ((jd_val - 2451545.0) / 36525)) % 360
+def to_local_datetime(ephem_d: ephem.Date) -> datetime:
+    """Convert ephem.Date back to local timezone datetime."""
+    return pytz.utc.localize(ephem_d.datetime()).astimezone(TZ)
 
 
-def ayanamsa(jd_val):
-    return (23.853 + 0.01397 * ((jd_val - 2451545.0) / 36525)) % 360
+def get_ayanamsa_deg(ephem_d: ephem.Date) -> float:
+    """Calculate Lahiri (Chitra Paksha) Ayanamsa for the given ephem date."""
+    jd_val = ephem.julian_date(ephem_d)
+    t = (jd_val - 2451545.0) / 36525.0
+    return (23.8570922 + 1.3969713 * t + 0.0003086 * t * t) % 360.0
 
 
-def sidereal(l, jd_val):
-    return (l - ayanamsa(jd_val) + 360) % 360
+def get_moon_sun_elongation(ephem_d: ephem.Date) -> float:
+    """Calculate Moon - Sun apparent ecliptic longitude elongation in degrees [0, 360)."""
+    sun = ephem.Sun(ephem_d)
+    moon = ephem.Moon(ephem_d)
+    sun_lon = math.degrees(ephem.Ecliptic(sun).lon) % 360.0
+    moon_lon = math.degrees(ephem.Ecliptic(moon).lon) % 360.0
+    return (moon_lon - sun_lon) % 360.0
 
 
-def tithi(jd_val):
-    s = sidereal(sun_long(jd_val), jd_val)
-    m = sidereal(moon_long(jd_val), jd_val)
-    diff = (m - s + 360) % 360
-    return diff / 12.0
+def get_sidereal_moon_lon(ephem_d: ephem.Date) -> float:
+    """Calculate Moon sidereal (Nirayana) longitude in degrees [0, 360)."""
+    moon = ephem.Moon(ephem_d)
+    moon_lon = math.degrees(ephem.Ecliptic(moon).lon) % 360.0
+    ayan = get_ayanamsa_deg(ephem_d)
+    return (moon_lon - ayan + 360.0) % 360.0
 
 
-def nakshatra_value(jd_val):
-    m_long = sidereal(moon_long(jd_val), jd_val)
-    return m_long / NAKSHATRA_ARC
+def get_sidereal_sun_lon(ephem_d: ephem.Date) -> float:
+    """Calculate Sun sidereal (Nirayana) longitude in degrees [0, 360)."""
+    sun = ephem.Sun(ephem_d)
+    sun_lon = math.degrees(ephem.Ecliptic(sun).lon) % 360.0
+    ayan = get_ayanamsa_deg(ephem_d)
+    return (sun_lon - ayan + 360.0) % 360.0
 
 
-def get_rasi_name(sidereal_longitude: float) -> str:
-    rasi_index = int(sidereal_longitude / 30) % 12
-    return RASHI_NAMES[rasi_index]
+def find_crossing_time(val_func, target_deg: float, t_start: ephem.Date, t_end: ephem.Date) -> ephem.Date:
+    """Find the exact moment when val_func(t) crosses target_deg using continuous angular bisection."""
+    def f(t_val):
+        d = ephem.Date(t_val)
+        current_deg = val_func(d)
+        return (current_deg - target_deg + 180.0) % 360.0 - 180.0
 
-
-def get_sun_rasi(ref_date):
-    noon = TZ.localize(datetime(ref_date.year, ref_date.month, ref_date.day, 12, 0))
-    jd_noon = jd(noon)
-    s_long = sun_long(jd_noon)
-    s_sidereal = sidereal(s_long, jd_noon)
-    return get_rasi_name(s_sidereal)
-
-
-def get_moon_rasi(ref_date):
-    noon = TZ.localize(datetime(ref_date.year, ref_date.month, ref_date.day, 12, 0))
-    jd_noon = jd(noon)
-    m_long = moon_long(jd_noon)
-    m_sidereal = sidereal(m_long, jd_noon)
-    return get_rasi_name(m_sidereal)
-
-
-def find_boundary_crossing(
-    ref_jd: float, boundary_idx: float, period_val_func, cycle_length: int
-) -> float:
-    B = boundary_idx
-    V_ref = period_val_func(ref_jd)
-    delta = V_ref - B
-    B_prime = B + round(delta / cycle_length) * cycle_length
-    lo = ref_jd - 1.5
-    hi = ref_jd + 1.5
-    for _ in range(50):
-        mid = (lo + hi) / 2
-        value = period_val_func(mid)
-        if value < B_prime:
+    lo = float(t_start)
+    hi = float(t_end)
+    for _ in range(45):
+        mid = (lo + hi) / 2.0
+        val = f(mid)
+        if val < 0:
             lo = mid
         else:
             hi = mid
-    return (lo + hi) / 2
+    return ephem.Date((lo + hi) / 2.0)
 
 
-def dt_from_jd(jd_val):
-    return datetime.fromtimestamp((jd_val - 2440587.5) * 86400, tz=TZ)
+def get_tithi_at(dt: datetime) -> Dict[str, Any]:
+    """Calculate the Tithi, Paksha, and precise start/end boundary times at the given datetime."""
+    d = to_ephem_date(dt)
+    elongation = get_moon_sun_elongation(d)
+    tithi_idx = int(elongation / 12.0) % 30
 
-
-def get_tithi_span(ref_date):
-    noon = TZ.localize(datetime(ref_date.year, ref_date.month, ref_date.day, 12, 0))
-    jd_noon = jd(noon)
-    current_tithi_val = tithi(jd_noon)
-    current_tithi_idx = int(current_tithi_val)
-    if current_tithi_idx == 14:
+    if tithi_idx == 14:
         name_key = "Pūrṇimā"
         paksha = "Śukla"
-    elif current_tithi_idx == 29:
+    elif tithi_idx == 29:
         name_key = "Amāvasyā"
         paksha = "Kṛṣṇa"
     else:
@@ -552,36 +543,101 @@ def get_tithi_span(ref_date):
             "Trayodaśī",
             "Caturdaśī",
         ]
-        name_key = tithi_names[current_tithi_idx % 15]
-        paksha = "Śukla" if current_tithi_idx < 15 else "Kṛṣṇa"
-    start_jd = find_boundary_crossing(jd_noon, current_tithi_idx, tithi, 30)
-    end_jd = find_boundary_crossing(jd_noon, current_tithi_idx + 1, tithi, 30)
+        name_key = tithi_names[tithi_idx % 15]
+        paksha = "Śukla" if tithi_idx < 15 else "Kṛṣṇa"
+
+    start_target = tithi_idx * 12.0
+    end_target = ((tithi_idx + 1) * 12.0) % 360.0
+
+    start_d = find_crossing_time(get_moon_sun_elongation, start_target, ephem.Date(float(d) - 1.5), d)
+    end_d = find_crossing_time(get_moon_sun_elongation, end_target, d, ephem.Date(float(d) + 1.5))
+
     return {
-        "idx": current_tithi_idx,
+        "idx": tithi_idx,
         "name": name_key,
         "paksha": paksha,
-        "start": dt_from_jd(start_jd),
-        "end": dt_from_jd(end_jd),
+        "start": to_local_datetime(start_d),
+        "end": to_local_datetime(end_d),
     }
 
 
-def get_nakshatra_span(ref_date):
-    noon = TZ.localize(datetime(ref_date.year, ref_date.month, ref_date.day, 12, 0))
-    jd_noon = jd(noon)
-    current_nakshatra_val = nakshatra_value(jd_noon)
-    current_nakshatra_idx = int(current_nakshatra_val) % 27
-    name = NAKSHATRA_NAMES[current_nakshatra_idx]
-    start_jd = find_boundary_crossing(
-        jd_noon, current_nakshatra_idx, nakshatra_value, 27
-    )
-    end_jd = find_boundary_crossing(
-        jd_noon, current_nakshatra_idx + 1, nakshatra_value, 27
-    )
+def get_nakshatra_at(dt: datetime) -> Dict[str, Any]:
+    """Calculate the Nakshatra and precise start/end boundary times at the given datetime."""
+    d = to_ephem_date(dt)
+    moon_sidereal = get_sidereal_moon_lon(d)
+    nak_arc = 360.0 / 27.0
+    nak_idx = int(moon_sidereal / nak_arc) % 27
+    name = NAKSHATRA_NAMES[nak_idx]
+
+    start_target = nak_idx * nak_arc
+    end_target = ((nak_idx + 1) * nak_arc) % 360.0
+
+    start_d = find_crossing_time(get_sidereal_moon_lon, start_target, ephem.Date(float(d) - 1.5), d)
+    end_d = find_crossing_time(get_sidereal_moon_lon, end_target, d, ephem.Date(float(d) + 1.5))
+
     return {
-        "idx": current_nakshatra_idx,
+        "idx": nak_idx,
         "name": name,
-        "start": dt_from_jd(start_jd),
-        "end": dt_from_jd(end_jd),
+        "start": to_local_datetime(start_d),
+        "end": to_local_datetime(end_d),
+    }
+
+
+def get_sun_rasi(dt: datetime) -> str:
+    """Get the sidereal Sun sign (Surya Rasi) at the given datetime."""
+    d = to_ephem_date(dt)
+    s_sidereal = get_sidereal_sun_lon(d)
+    return RASHI_NAMES[int(s_sidereal / 30.0) % 12]
+
+
+def get_moon_rasi(dt: datetime) -> str:
+    """Get the sidereal Moon sign (Chandra Rasi) at the given datetime."""
+    d = to_ephem_date(dt)
+    m_sidereal = get_sidereal_moon_lon(d)
+    return RASHI_NAMES[int(m_sidereal / 30.0) % 12]
+
+
+def get_accurate_astro_times(target_date: date) -> Dict[str, Optional[datetime]]:
+    """Compute accurate sunrise, sunset, moonrise, moonset, and next sunrise for a given date."""
+    obs = ephem.Observer()
+    obs.lat, obs.lon, obs.elevation = LATITUDE, LONGITUDE, ELEVATION
+    target_dt_local = TZ.localize(datetime.combine(target_date, time(0, 0, 0)))
+    obs.date = to_ephem_date(target_dt_local)
+
+    sun = ephem.Sun()
+    moon = ephem.Moon()
+
+    sunrise_ephem = obs.next_rising(sun)
+    sunrise_dt = to_local_datetime(sunrise_ephem)
+
+    obs.date = sunrise_ephem
+    sunset_ephem = obs.next_setting(sun)
+    sunset_dt = to_local_datetime(sunset_ephem)
+
+    obs.date = sunset_ephem
+    next_sunrise_ephem = obs.next_rising(sun)
+    next_sunrise_dt = to_local_datetime(next_sunrise_ephem)
+
+    # Moon rise & set for the day (from local midnight)
+    obs.date = to_ephem_date(target_dt_local)
+    moon_rise_dt = None
+    try:
+        moon_rise_dt = to_local_datetime(obs.next_rising(moon))
+    except (ephem.NeverUpError, ephem.AlwaysUpError):
+        pass
+
+    moon_set_dt = None
+    try:
+        moon_set_dt = to_local_datetime(obs.next_setting(moon))
+    except (ephem.NeverUpError, ephem.AlwaysUpError):
+        pass
+
+    return {
+        "sunrise": sunrise_dt,
+        "sunset": sunset_dt,
+        "next_sunrise": next_sunrise_dt,
+        "moon_rise": moon_rise_dt,
+        "moon_set": moon_set_dt,
     }
 
 
@@ -592,93 +648,45 @@ swara_at_waking = ["Pingala", "Ida", "Pingala", "Ida", "Ida", "Ida", "Pingala"][
     day_index
 ]
 
-# --- Calculate Main Data ---
-yesterday_tithi = get_tithi_span(selected_date - timedelta(days=1))
-today_tithi = get_tithi_span(selected_date)
-tomorrow_tithi = get_tithi_span(selected_date + timedelta(days=1))
-
-yesterday_nakshatra = get_nakshatra_span(selected_date - timedelta(days=1))
-today_nakshatra = get_nakshatra_span(selected_date)
-tomorrow_nakshatra = get_nakshatra_span(selected_date + timedelta(days=1))
-
-today_sun_rasi = get_sun_rasi(selected_date)
-today_moon_rasi = get_moon_rasi(selected_date)
-
-
-# --- PRECISE ASTRONOMICAL CALCULATIONS (Using EPHEM) ---
-def get_accurate_astro_times(target_date):
-    obs = ephem.Observer()
-    obs.lat, obs.lon, obs.elevation = LATITUDE, LONGITUDE, ELEVATION
-    target_dt_ist = TZ.localize(datetime.combine(target_date, time(0, 0, 0)))
-    target_dt_utc = target_dt_ist.astimezone(pytz.utc)
-    obs.date = target_dt_utc
-
-    sun = ephem.Sun()
-    moon = ephem.Moon()
-
-    sunrise_utc = obs.next_rising(sun).datetime()
-    sunset_utc = obs.next_setting(sun).datetime()
-
-    moon_rise_utc = None
-    try:
-        moon_rise_utc = obs.next_rising(moon).datetime()
-    except ephem.NeverUpError:
-        pass
-    except ephem.AlwaysUpError:
-        pass
-
-    moon_set_utc = None
-    try:
-        moon_set_utc = obs.next_setting(moon).datetime()
-    except ephem.NeverUpError:
-        pass
-    except ephem.AlwaysUpError:
-        pass
-
-    def to_local(utc_dt):
-        if utc_dt is None:
-            return None
-        return pytz.utc.localize(utc_dt).astimezone(TZ)
-
-    return {
-        "sunrise": to_local(sunrise_utc),
-        "sunset": to_local(sunset_utc),
-        "moon_rise": to_local(moon_rise_utc),
-        "moon_set": to_local(moon_set_utc),
-    }
-
-
 astro_data = get_accurate_astro_times(selected_date)
 sunrise = astro_data["sunrise"]
 sunset = astro_data["sunset"]
+next_sunrise = astro_data["next_sunrise"]
 moon_rise = astro_data["moon_rise"]
 moon_set = astro_data["moon_set"]
 
+astro_yesterday = get_accurate_astro_times(selected_date - timedelta(days=1))
+astro_tomorrow = get_accurate_astro_times(selected_date + timedelta(days=1))
+yesterday_sunrise = astro_yesterday["sunrise"]
+tomorrow_sunrise = astro_tomorrow["sunrise"]
+
+today_tithi = get_tithi_at(sunrise)
+yesterday_tithi = get_tithi_at(yesterday_sunrise)
+tomorrow_tithi = get_tithi_at(tomorrow_sunrise)
+
+today_nakshatra = get_nakshatra_at(sunrise)
+yesterday_nakshatra = get_nakshatra_at(yesterday_sunrise)
+tomorrow_nakshatra = get_nakshatra_at(tomorrow_sunrise)
+
+today_sun_rasi = get_sun_rasi(sunrise)
+today_moon_rasi = get_moon_rasi(sunrise)
+
 
 # --- Calculate Midpoints ---
-def calculate_madhyamas(sunrise: datetime, sunset: datetime) -> Dict[str, datetime]:
-    day_duration = sunset - sunrise
-    day_madhyama = sunrise + (day_duration / 2)
-    next_sunrise = sunrise + timedelta(days=1)
-    night_duration = next_sunrise - sunset
-    night_madhyama = sunset + (night_duration / 2)
+def calculate_madhyamas(sunrise_dt: datetime, sunset_dt: datetime, next_sunrise_dt: datetime) -> Dict[str, datetime]:
+    day_duration = sunset_dt - sunrise_dt
+    day_madhyama = sunrise_dt + (day_duration / 2)
+    night_duration = next_sunrise_dt - sunset_dt
+    night_madhyama = sunset_dt + (night_duration / 2)
     return {"day_madhyama": day_madhyama, "night_madhyama": night_madhyama}
 
 
-madhyamas = calculate_madhyamas(sunrise, sunset)
+madhyamas = calculate_madhyamas(sunrise, sunset, next_sunrise)
 midday = madhyamas["day_madhyama"]
 midnight = madhyamas["night_madhyama"]
 
-tithi_at_sunrise = (
-    today_tithi
-    if sunrise >= today_tithi["start"] and sunrise < today_tithi["end"]
-    else (yesterday_tithi if sunrise < today_tithi["start"] else tomorrow_tithi)
-)
-tithi_at_sunset = (
-    today_tithi
-    if sunset >= today_tithi["start"] and sunset < today_tithi["end"]
-    else (yesterday_tithi if sunset < today_tithi["start"] else tomorrow_tithi)
-)
+tithi_at_sunrise = get_tithi_at(sunrise)
+tithi_at_sunset = get_tithi_at(sunset)
 
 sunrise_swaras = get_swaras_from_tithi(tithi_at_sunrise)
 sunset_swaras = get_swaras_from_tithi(tithi_at_sunset)
