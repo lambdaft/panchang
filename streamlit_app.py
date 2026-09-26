@@ -393,11 +393,8 @@ def to_local_datetime(ephem_d: ephem.Date) -> datetime:
     """Convert ephem.Date back to local timezone datetime."""
     return pytz.utc.localize(ephem_d.datetime()).astimezone(TZ)
 
-def get_ayanamsa_deg(ephem_d: ephem.Date) -> float:
-    """Calculate Lahiri (Chitra Paksha) Ayanamsa for the given ephem date."""
-    jd_val = ephem.julian_date(ephem_d)
-    t = (jd_val - 2451545.0) / 36525.0
-    return (23.8570922 + 1.3969713 * t + 0.0003086 * t * t) % 360.0
+# Standard Lahiri (Chitra Paksha) Ayanamsa relative to J2000.0 equinox: 23° 51' 25.53"
+LAHIRI_AYANAMSA_J2000 = 23.8570922
 
 def get_moon_sun_elongation(ephem_d: ephem.Date) -> float:
     """Calculate Moon - Sun apparent ecliptic longitude elongation in degrees [0, 360)."""
@@ -405,21 +402,19 @@ def get_moon_sun_elongation(ephem_d: ephem.Date) -> float:
     moon = ephem.Moon(ephem_d)
     sun_lon = math.degrees(ephem.Ecliptic(sun).lon) % 360.0
     moon_lon = math.degrees(ephem.Ecliptic(moon).lon) % 360.0
-    return (moon_lon - sun_lon) % 360.0
+    return (moon_lon - sun_lon + 360.0) % 360.0
 
 def get_sidereal_moon_lon(ephem_d: ephem.Date) -> float:
     """Calculate Moon sidereal (Nirayana) longitude in degrees [0, 360)."""
     moon = ephem.Moon(ephem_d)
     moon_lon = math.degrees(ephem.Ecliptic(moon).lon) % 360.0
-    ayan = get_ayanamsa_deg(ephem_d)
-    return (moon_lon - ayan + 360.0) % 360.0
+    return (moon_lon - LAHIRI_AYANAMSA_J2000 + 360.0) % 360.0
 
 def get_sidereal_sun_lon(ephem_d: ephem.Date) -> float:
     """Calculate Sun sidereal (Nirayana) longitude in degrees [0, 360)."""
     sun = ephem.Sun(ephem_d)
     sun_lon = math.degrees(ephem.Ecliptic(sun).lon) % 360.0
-    ayan = get_ayanamsa_deg(ephem_d)
-    return (sun_lon - ayan + 360.0) % 360.0
+    return (sun_lon - LAHIRI_AYANAMSA_J2000 + 360.0) % 360.0
 
 def find_crossing_time(val_func, target_deg: float, t_start: ephem.Date, t_end: ephem.Date) -> ephem.Date:
     """Find the exact moment when val_func(t) crosses target_deg using continuous angular bisection."""
